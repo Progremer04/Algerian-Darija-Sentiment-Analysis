@@ -5,6 +5,7 @@ import torch.nn as nn
 import json
 import re
 import os
+import requests  # Added for downloading model
 
 app = Flask(__name__)
 
@@ -71,10 +72,28 @@ def encode_text(text, vocab, max_len):
     return encoded
 
 # ============================================================
-# 📥 LOAD MODEL + VOCAB
+# 📥 LOAD MODEL + VOCAB (WITH AUTO-DOWNLOAD)
 # ============================================================
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Download model if it doesn't exist locally
+MODEL_URL = "https://gitlab.com/germiniamine/nlp-project-mihobi-alliche-statment-algeria/-/raw/main/interface/model.pth"
+MODEL_PATH = "model.pth"
+
+if not os.path.exists(MODEL_PATH):
+    print("🔄 Downloading model from GitLab (66MB)... please wait")
+    try:
+        response = requests.get(MODEL_URL, stream=True, timeout=30)
+        response.raise_for_status()
+        with open(MODEL_PATH, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print("✅ Model downloaded successfully!")
+    except Exception as e:
+        print(f"❌ Failed to download model: {e}")
+        raise
+
+# Load vocab and metadata
 with open('metadata.json', 'r', encoding='utf-8') as f:
     metadata = json.load(f)
 max_len = metadata.get("max_len", 100)
@@ -82,10 +101,13 @@ max_len = metadata.get("max_len", 100)
 with open('vocab.json', 'r', encoding='utf-8') as f:
     vocab = json.load(f)
 
+# Load model
+print("🧠 Loading model...")
 model = LSTMCNN(len(vocab))
-model.load_state_dict(torch.load('model.pth', map_location=device))
+model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.to(device)
 model.eval()
+print("✅ Model loaded and ready!")
 
 # ============================================================
 # 🌐 FLASK APP
